@@ -39,6 +39,7 @@ import life.qbic.projectwizard.model.TestSampleInformation;
 import life.qbic.projectwizard.uicomponents.LigandExtractPanel;
 import life.qbic.projectwizard.uicomponents.MSOptionComponent;
 import life.qbic.projectwizard.uicomponents.TechnologiesPanel;
+import matrix.MatrixStep;
 import life.qbic.portal.Styles.NotificationType;
 
 import com.vaadin.ui.CheckBox;
@@ -186,7 +187,8 @@ public class TestStep implements WizardStep {
           resetNextSteps(hasPools());
           wizard.addStep(steps.get(Steps.Registration));
         } else {
-          replaceWizardSteps(msPanel.getNextMSSteps(steps));
+//          replaceWizardSteps(msPanel.getNextMSSteps(steps));
+          replaceWizardSteps(new ArrayList<WizardStep>(Arrays.asList(new MatrixStep())));
         }
       }
     };
