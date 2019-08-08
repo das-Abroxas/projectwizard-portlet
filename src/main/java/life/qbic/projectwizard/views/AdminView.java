@@ -25,6 +25,7 @@ import life.qbic.datamodel.persons.OpenbisSpaceUserRole;
 import life.qbic.openbis.openbisclient.IOpenBisClient;
 import life.qbic.projectwizard.adminviews.MCCView;
 import life.qbic.projectwizard.adminviews.MCCViewNew;
+import life.qbic.projectwizard.adminviews.ServiceTestView;
 import life.qbic.projectwizard.model.Vocabularies;
 import life.qbic.projectwizard.registration.IOpenbisCreationController;
 import life.qbic.projectwizard.registration.OpenbisV3CreationController;
@@ -112,7 +113,7 @@ public class AdminView extends VerticalLayout {
     conversionView = new ExperimentalDesignConversionView(openbis, registrator);
     tabs.addTab(conversionView, "Project Migration");
 
-//     tabs.addTab(new PrototypeView(), "Prototypes");
+     tabs.addTab(new ServiceTestView(openbis), "Tracking Test");
 
     addComponent(tabs);
     initButtons();

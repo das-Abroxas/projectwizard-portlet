@@ -36,7 +36,7 @@ import life.qbic.projectwizard.io.TaxonomySearcher;
 import life.qbic.portal.Styles;
 import life.qbic.portal.Styles.NotificationType;
 
-public class PrototypeView extends VerticalLayout {
+public class TaxonomyView extends VerticalLayout {
 
   private TextField taxTest;
   private Button search;
@@ -45,7 +45,7 @@ public class PrototypeView extends VerticalLayout {
   private OntologyParser ontoParser;
   private ComboBox tissueBox;
 
-  public PrototypeView(DBManager dbm) {
+  public TaxonomyView(DBManager dbm) {
     this.ontoParser = new OntologyParser(dbm);
     // owlParser.init();
     setMargin(true);
