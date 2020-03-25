@@ -63,7 +63,6 @@ public class OpenbisV3APIWrapper {
     this.pw = pw;
   }
 
-
   public SearchResult<Project> getProject(String code) {
     checklogin();
     ProjectSearchCriteria sc = new ProjectSearchCriteria();
@@ -198,10 +197,10 @@ public class OpenbisV3APIWrapper {
 
     ExperimentFetchOptions eOptions = new ExperimentFetchOptions();
     eOptions.withProperties();
-    
+
     cOptions.withExperimentUsing(eOptions);
     cOptions.withChildren();
-    
+
     DataSetFetchOptions dsOptions = new DataSetFetchOptions();
     dsOptions.withType();
     dsOptions.withPhysicalData();
