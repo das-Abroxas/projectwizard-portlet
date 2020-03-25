@@ -76,7 +76,6 @@ import life.qbic.projectwizard.registration.IOpenbisCreationController;
 import life.qbic.projectwizard.registration.OpenbisV3APIWrapper;
 import life.qbic.projectwizard.steps.*;
 import life.qbic.projectwizard.uicomponents.ProjectInformationComponent;
-import life.qbic.utils.TimeUtils;
 import life.qbic.portal.Styles;
 import life.qbic.portal.Styles.NotificationType;
 import life.qbic.xml.notes.Note;
@@ -412,6 +411,7 @@ public class WizardController implements IRegistrationController {
       @Override
       public void buttonClick(ClickEvent event) {
         String src = event.getButton().getCaption();
+        notes = new ArrayList<Note>();
         if (src.equals("Register Project")) {
           String desc = contextStep.getDescription();
           String altTitle = contextStep.getExpSecondaryName();
@@ -423,7 +423,6 @@ public class WizardController implements IRegistrationController {
           String space = contextStep.getSpaceCode();
           String project = contextStep.getProjectCode();
           String altTitle = contextStep.getExpSecondaryName();
-          List<Note> notes = new ArrayList<Note>();
           boolean afterMS = w.getSteps().contains(steps.get(Steps.Protein_Fractionation));
           if (afterMS) {
             List<String> infos = new ArrayList<String>();
@@ -447,7 +446,7 @@ public class WizardController implements IRegistrationController {
               }
             }
           }
-          sendInquiry(space, project, altTitle, tsv, user, notes);
+          sendInquiry(space, project, altTitle, tsv, user);
           Styles.notification("Project inquiry sent.",
               "Your Project inquiry was successfully sent to QBiC. We will contact you.",
               NotificationType.SUCCESS);
@@ -458,7 +457,6 @@ public class WizardController implements IRegistrationController {
           String desc = contextStep.getDescription();
           boolean afterMS = w.getSteps().contains(steps.get(Steps.Protein_Fractionation));
           // Additional information set in the protein and/or peptide step(s)
-          notes = new ArrayList<Note>();
           if (afterMS) {
             List<String> infos = new ArrayList<String>();
             String protInfo = protFracStep.getAdditionalInfo();
@@ -614,7 +612,7 @@ public class WizardController implements IRegistrationController {
       }
 
       private void sendInquiry(String space, String project, String altTitle, String tsv,
-          String user, List<Note> notes) {
+          String user) {
         Map<String, Object> parameters = new HashMap<String, Object>();
         parameters.put("project", project);
         parameters.put("space", space);
