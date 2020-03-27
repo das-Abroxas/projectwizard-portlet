@@ -8,13 +8,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-
 import org.apache.commons.lang.WordUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.vaadin.teemu.wizards.WizardStep;
-
 import com.vaadin.data.Item;
 import com.vaadin.data.Property;
 import com.vaadin.data.Property.ValueChangeEvent;
@@ -39,7 +37,6 @@ import com.vaadin.ui.Window;
 import com.vaadin.ui.Button.ClickEvent;
 import com.vaadin.ui.Button.ClickListener;
 import com.vaadin.ui.themes.ValoTheme;
-
 import life.qbic.datamodel.experiments.ExperimentModel;
 import life.qbic.datamodel.ms.MSProperties;
 import life.qbic.datamodel.samples.AOpenbisSample;
@@ -732,25 +729,23 @@ public class MSAnalyteStep implements WizardStep {
     }
   }
 
-  private void filterLCMSBox(Object id, String msDevice) {
+  private void filterLCMSBox(Object id, String deviceName) {
+    String msDeviceCode = vocabs.getDeviceMap().get(deviceName);
     ComboBox b = parseBoxRow(baseAnalyteSampleTable, id, "LCMS Method");
     Object val = b.getValue();
     b.removeAllItems();
     List<String> methods = new ArrayList<String>();
-    if (msDevice == null || msDevice.isEmpty() || !msDevice.contains("PCT"))
+    if (msDeviceCode == null || msDeviceCode.isEmpty() || !msDeviceCode.contains("PCT"))
       methods.addAll(lcmsMethods);
     else {
-      msDevice = msDevice.replace(" ", "").toUpperCase();
+      String[] deviceSplit = msDeviceCode.split("_");
+      String deviceSuffix = deviceSplit[deviceSplit.length - 1];
       for (String method : lcmsMethods) {
-        String devType = "notfound";
-        try {
-          devType = method.split("_")[1];
-        } catch (ArrayIndexOutOfBoundsException e) {
-        }
-        if (msDevice.contains(devType) || dontFilter.contains(method)) {
+        if (method.contains(deviceSuffix)) {
           methods.add(method);
         }
       }
+      methods.addAll(dontFilter);
     }
     b.addItems(methods);
     if (val != null && methods.contains(val))
