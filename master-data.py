@@ -5,6 +5,7 @@ print ("Importing Master Data...")
 
 tr = service.transaction()
 
+exp_type_Q_PROJECT_DETAILS = tr.getExperimentType("Q_PROJECT_DETAILS")
 
 prop_type_Q_EXPERIMENTAL_SETUP = tr.getOrCreateNewPropertyType('Q_EXPERIMENTAL_SETUP', DataType.XML)
 prop_type_Q_EXPERIMENTAL_SETUP.setLabel('Experimental design and properties')
