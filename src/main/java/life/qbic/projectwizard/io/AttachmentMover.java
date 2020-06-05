@@ -46,9 +46,9 @@ public class AttachmentMover {
    * Moves attachments to the datamover folder.
    * 
    * @param attachments List of names and other infos for each attachment
-   * @param moveUploadsReadyRunnable
-   * @param object2
-   * @param object
+   * @param bar
+   * @param info
+   * @param ready
    * @return
    * @throws IOException
    */

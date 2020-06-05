@@ -9,6 +9,8 @@ import java.util.Map;
 import java.util.Set;
 import javax.xml.bind.JAXBElement;
 import javax.xml.bind.JAXBException;
+
+import life.qbic.openbis.openbisclient.OpenBisClient;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import com.vaadin.ui.Label;
@@ -43,7 +45,6 @@ import life.qbic.datamodel.persons.OpenbisSpaceUserRole;
 import life.qbic.datamodel.samples.ISampleBean;
 import life.qbic.datamodel.samples.SampleType;
 import life.qbic.datamodel.samples.TSVSampleBean;
-import life.qbic.openbis.openbisclient.IOpenBisClient;
 import life.qbic.xml.manager.StudyXMLParser;
 import life.qbic.xml.study.Qexperiment;
 
@@ -58,14 +59,14 @@ import life.qbic.xml.study.Qexperiment;
 public class OpenbisV3CreationController implements IOpenbisCreationController {
   final int RETRY_UNTIL_SECONDS_PASSED = 5;
   final int SPLIT_AT_ENTITY_SIZE = 500;
-  private IOpenBisClient openbis;
+  private OpenBisClient openbis;
   private OpenbisV3APIWrapper api;
 
   private static final Logger logger = LogManager.getLogger(OpenbisV3CreationController.class);
   private String errors;
   private String user;
 
-  public OpenbisV3CreationController(IOpenBisClient openbis, String user,
+  public OpenbisV3CreationController(OpenBisClient openbis, String user,
       OpenbisV3APIWrapper v3API) {
     this.openbis = openbis;
     this.api = v3API;
@@ -199,11 +200,11 @@ public class OpenbisV3CreationController implements IOpenbisCreationController {
    * 
    * @param tsvSampleHierarchy
    * @param description
-   * @param secondaryName
+   * @param informativeExperiments
    * @param bar
    * @param info
    * @param ready
-   * @param user
+   * @param entitiesToUpdate
    */
   @Override
   public void registerProjectWithExperimentsAndSamplesBatchWise(
@@ -217,10 +218,9 @@ public class OpenbisV3CreationController implements IOpenbisCreationController {
         new RegisterableProject(tsvSampleHierarchy, description, informativeExperiments, isPilot);
 
     for (String experiment : entitiesToUpdate.keySet()) {
-      String expID = ExperimentCodeFunctions.getExperimentIdentifier(p.getSpace(),
-          p.getProjectCode(), experiment);
-      long modificationTime = openbis.getExperimentById2(expID).get(0).getRegistrationDetails()
-          .getModificationDate().getTime();
+      String expID = ExperimentCodeFunctions.getExperimentIdentifier(p.getSpace(), p.getProjectCode(), experiment);
+
+      long modificationTime = openbis.getExperiment(expID).getModificationDate().getTime();
 
       updateExperiment(expID, entitiesToUpdate.get(experiment));
 
@@ -228,8 +228,7 @@ public class OpenbisV3CreationController implements IOpenbisCreationController {
       double TIMEOUT = 10000;
 
       while (newModificationTime == modificationTime && TIMEOUT > 0) {
-        newModificationTime = openbis.getExperimentById2(expID).get(0).getRegistrationDetails()
-            .getModificationDate().getTime();
+        newModificationTime = openbis.getExperiment(expID).getModificationDate().getTime();
         TIMEOUT -= 300;
         try {
           Thread.sleep(300);
@@ -294,6 +293,7 @@ public class OpenbisV3CreationController implements IOpenbisCreationController {
           UI.getCurrent().access(ready);
           return;
         }
+
         int i = 0;
         for (List<ISampleBean> level : tsvSampleHierarchy) {
           i++;
@@ -418,11 +418,11 @@ public class OpenbisV3CreationController implements IOpenbisCreationController {
 
     for (ISampleBean sample : samples) {
       if (openbis.sampleExists(sample.getCode())) {
-        logger.warn(sample.getCode() + " already exists."
-            + " Removing this sample from registration process.");
-      } else {
+        logger.warn(sample.getCode() + " already exists. Removing this sample from registration process.");
 
+      } else {
         SampleCreation sampleCreation = new SampleCreation();
+        sampleCreation.setCode(sample.getCode());
         String space = sample.getSpace();
         sampleCreation.setTypeId(new EntityTypePermId(sample.getType().toString()));
         sampleCreation.setSpaceId(new SpacePermId(space));
@@ -430,15 +430,17 @@ public class OpenbisV3CreationController implements IOpenbisCreationController {
         List<SampleIdentifier> parents = new ArrayList<>();
         for (String parent : sample.getParentIDs()) {
           if (!parent.isEmpty()) {
-            parents.add(new SampleIdentifier(space, null, parent));
+            logger.info("Supposed parent of "+sample.getCode()+": "+parent);
+            // parents.add(new SampleIdentifier(space, null, parent));
+            //parents.add( new SampleIdentifier(parent) );
+            parents.add( new SampleIdentifier(space, sample.getProject(), null, parent) );
           }
         }
         if(!parents.isEmpty()) {
         sampleCreation.setParentIds(parents);
         }
-        sampleCreation.setExperimentId(new ExperimentIdentifier(
-            "/" + space + "/" + sample.getProject() + "/" + sample.getExperiment()));
-        sampleCreation.setCode(sample.getCode());
+        sampleCreation.setExperimentId(
+                new ExperimentIdentifier(space, sample.getProject(), sample.getExperiment()));
 
         Map<String, String> props = new HashMap<>();
         if (!sample.getSecondaryName().isEmpty()) {

@@ -24,6 +24,11 @@ import java.util.Map;
 import java.util.Set;
 import javax.xml.bind.JAXBElement;
 import javax.xml.bind.JAXBException;
+
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.experiment.Experiment;
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.project.Project;
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.Sample;
+import life.qbic.openbis.openbisclient.OpenBisClient;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
@@ -41,9 +46,7 @@ import com.vaadin.ui.Table;
 import com.vaadin.ui.VerticalLayout;
 import com.vaadin.ui.Button.ClickEvent;
 import com.vaadin.ui.themes.ValoTheme;
-import ch.systemsx.cisd.openbis.generic.shared.api.v1.dto.Experiment;
-import ch.systemsx.cisd.openbis.generic.shared.api.v1.dto.Project;
-import ch.systemsx.cisd.openbis.generic.shared.api.v1.dto.Sample;
+
 import life.qbic.datamodel.experiments.ExperimentType;
 import life.qbic.datamodel.experiments.OpenbisExperiment;
 import life.qbic.datamodel.identifiers.ExperimentCodeFunctions;
@@ -52,7 +55,6 @@ import life.qbic.datamodel.samples.SampleType;
 import life.qbic.datamodel.samples.TSVSampleBean;
 import life.qbic.expdesign.ParserHelpers;
 import life.qbic.expdesign.model.ExperimentalDesignPropertyWrapper;
-import life.qbic.openbis.openbisclient.IOpenBisClient;
 import life.qbic.projectwizard.control.IRegistrationController;
 import life.qbic.projectwizard.control.SampleCounter;
 import life.qbic.projectwizard.model.NewMCCPatient;
@@ -67,55 +69,45 @@ import life.qbic.xml.properties.Property;
 import life.qbic.xml.study.Qexperiment;
 import life.qbic.xml.study.TechnologyType;
 
-public class MCCViewNew extends VerticalLayout
-    implements IRegistrationView, IRegistrationController {
-  /**
-   * 
-   */
+/**
+ *
+ */
+public class MCCViewNew extends VerticalLayout implements IRegistrationView, IRegistrationController {
+
   private static final long serialVersionUID = 5542816061866018937L;
 
-  private Logger logger = LogManager.getLogger(MCCViewNew.class);
+  private final Logger logger = LogManager.getLogger(MCCViewNew.class);
 
-  private IOpenBisClient openbis;
+  private OpenBisClient openbis;
   private IOpenbisCreationController creator;
-  // private XMLParser p = new XMLParser();
   private List<OpenbisExperiment> infoExperiments;
   final private StudyXMLParser xmlParser = new StudyXMLParser();
   private Experiment designExperiment;
   private JAXBElement<Qexperiment> expDesign;
+
   // view
   private final String mccSpace = "MULTISCALEHCC";
   private final List<String> weeks = new ArrayList<>(
       Arrays.asList("W00", "W02", "W04", "W10", "W18", "W26", "W34", "W42", "W50", "WXX"));
 
-  // private final Set<String> imagingWeeks = new HashSet<>(Arrays.asList("W00", "W04", "WXX"));
   private List<TechnologyType> techTypes;
   private ComboBox mccProjects;
-  private StandardTextField newProject;
-  private StandardTextField treatment;
-  private StandardTextField patient;
-  private Table existingPatients;
-
+  private StandardTextField newProject, treatment, patient;
+  private Table existingPatients, samples, metaData;
   private TabSheet editView;
-  private Table samples;
-  private Table metaData;
-
   private ProgressBar bar;
   private Label registerInfo;
   private Button addSamples;
 
   private List<Sample> entities;
   private Set<String> existingPatientIDs;
-  // private Set<String> casesWithWeeks;
   private SampleCounter counter;
-
   private String project;
-
   private ExperimentalDesignPropertyWrapper newDesign;
 
-  public MCCViewNew(IOpenBisClient openbis, IOpenbisCreationController creationController,
-      String user) {
-    techTypes = new ArrayList<TechnologyType>();
+
+  public MCCViewNew(OpenBisClient openbis, IOpenbisCreationController creationController, String user) {
+    techTypes = new ArrayList<>();
     techTypes.add(new TechnologyType("Transcriptomics"));
     techTypes.add(new TechnologyType("Proteomics"));
     techTypes.add(new TechnologyType("Metabolomics"));
@@ -123,12 +115,10 @@ public class MCCViewNew extends VerticalLayout
 
     this.openbis = openbis;
     this.creator = creationController;
-
-    // this.casesWithWeeks = new HashSet<String>();
     this.existingPatientIDs = new HashSet<>();
 
     mccProjects = new ComboBox("Source Project");
-    List<String> projects = new ArrayList<String>();
+    List<String> projects = new ArrayList<>();
     for (Project p : openbis.getProjectsOfSpace(mccSpace))
       projects.add(p.getCode());
     mccProjects.addStyleName(Styles.boxTheme);
@@ -210,18 +200,16 @@ public class MCCViewNew extends VerticalLayout
     designExperiment = null;
     System.out.println("searching design experiment");
     String id = ExperimentCodeFunctions.getInfoExperimentID(space, project);
-    List<Experiment> exps = openbis.getExperimentById2(id);
-    if (exps.isEmpty()) {
+    Experiment exps = openbis.getExperiment(id);
+
+    if (exps == null) {
       designExperiment = null;
       logger.error("could not find info experiment for project" + project);
-    } else {
-      Experiment e = exps.get(0);
-      if (e.getExperimentTypeCode().equalsIgnoreCase(ExperimentType.Q_PROJECT_DETAILS.name())) {
-        designExperiment = e;
-        expDesign =
-            xmlParser.parseXMLString(designExperiment.getProperties().get("Q_EXPERIMENTAL_SETUP"));
-        logger.debug("setting exp design: " + expDesign);
-      }
+
+    } else if (exps.getType().getCode().equalsIgnoreCase(ExperimentType.Q_PROJECT_DETAILS.name())) {
+      designExperiment = exps;
+      expDesign = xmlParser.parseXMLString(designExperiment.getProperties().get("Q_EXPERIMENTAL_SETUP"));
+      logger.debug("setting exp design: " + expDesign);
     }
   }
 
@@ -352,11 +340,11 @@ public class MCCViewNew extends VerticalLayout
       counter = new SampleCounter(newProject.getValue());
     boolean wrongFormat = false;
     String treat = "";
-    for (Sample s : openbis.getSamplesWithParentsAndChildrenOfProjectBySearchService(
+    for (Sample s : openbis.getSamplesOfProject(
         "/" + mccSpace + "/" + (String) mccProjects.getValue())) {
       counter.increment(s);
       String id = s.getProperties().get("Q_EXTERNALDB_ID");
-      if (s.getSampleTypeCode().equals("Q_BIOLOGICAL_ENTITY")) {
+      if (s.getType().getCode().equals("Q_BIOLOGICAL_ENTITY")) {
         entities.add(s);
         try {
           if (id != null) {

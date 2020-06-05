@@ -70,7 +70,8 @@ public class AnalyteStep implements WizardStep {
   /**
    * Create a new Sample Preparation step for the wizard
    * 
-   * @param sampleTypes Available list of sample types, e.g. Proteins, RNA etc.
+   * @param wizard
+   * @param vocabs
    */
   public AnalyteStep(Wizard wizard, Vocabularies vocabs) {
     this.wizard = wizard;

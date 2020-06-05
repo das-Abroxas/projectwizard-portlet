@@ -27,6 +27,11 @@ import java.util.stream.Collectors;
 import javax.xml.bind.JAXBElement;
 import javax.xml.bind.JAXBException;
 
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.experiment.Experiment;
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.experiment.create.ExperimentCreation;
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.project.Project;
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.Sample;
+import life.qbic.openbis.openbisclient.OpenBisClient;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -44,9 +49,6 @@ import com.vaadin.ui.VerticalLayout;
 import com.vaadin.ui.Button.ClickEvent;
 import com.vaadin.ui.themes.ValoTheme;
 
-import ch.systemsx.cisd.openbis.generic.shared.api.v1.dto.Experiment;
-import ch.systemsx.cisd.openbis.generic.shared.api.v1.dto.Project;
-import ch.systemsx.cisd.openbis.generic.shared.api.v1.dto.Sample;
 import life.qbic.datamodel.experiments.ExperimentType;
 import life.qbic.datamodel.experiments.OpenbisExperiment;
 import life.qbic.datamodel.identifiers.ExperimentCodeFunctions;
@@ -55,7 +57,6 @@ import life.qbic.datamodel.samples.SampleType;
 import life.qbic.datamodel.samples.TSVSampleBean;
 import life.qbic.expdesign.ParserHelpers;
 import life.qbic.expdesign.model.ExperimentalDesignPropertyWrapper;
-import life.qbic.openbis.openbisclient.IOpenBisClient;
 import life.qbic.projectwizard.control.IRegistrationController;
 import life.qbic.projectwizard.control.SampleCounter;
 import life.qbic.projectwizard.model.MCCPatient;
@@ -70,34 +71,28 @@ import life.qbic.xml.properties.Property;
 import life.qbic.xml.study.Qexperiment;
 import life.qbic.xml.study.TechnologyType;
 
+/**
+ *
+ */
 public class MCCView extends VerticalLayout implements IRegistrationView, IRegistrationController {
-  /**
-   * 
-   */
+
   private static final long serialVersionUID = 5542816061866018937L;
+  private final Logger logger = LogManager.getLogger(MCCView.class);
 
-  private Logger logger = LogManager.getLogger(MCCView.class);
-
-  private IOpenBisClient openbis;
+  private OpenBisClient openbis;
   private IOpenbisCreationController creator;
-  // private XMLParser p = new XMLParser();
   final private StudyXMLParser xmlParser = new StudyXMLParser();
   private Experiment designExperiment;
   private JAXBElement<Qexperiment> expDesign;
+
   // view
   private final String mccSpace = "MULTISCALEHCC";
   private List<TechnologyType> techTypes;
+
   private ComboBox mccProjects;
-  private StandardTextField newProject;
-  private StandardTextField treatment;
-  private StandardTextField timepoint;
-  private StandardTextField patient;
-  private Table existingPatients;
-
+  private StandardTextField newProject, treatment, timepoint, patient;
+  private Table existingPatients, samples, metaData;
   private TabSheet editView;
-  private Table samples;
-  private Table metaData;
-
   private ProgressBar bar;
   private Label registerInfo;
   private Button addSamples;
@@ -106,11 +101,10 @@ public class MCCView extends VerticalLayout implements IRegistrationView, IRegis
   private List<String> patients;
   private Set<String> cases;
   private SampleCounter counter;
-
   private String project;
 
-  public MCCView(IOpenBisClient openbis, IOpenbisCreationController creationController,
-      String user) {
+
+  public MCCView(OpenBisClient openbis, IOpenbisCreationController creationController, String user) {
     techTypes = new ArrayList<TechnologyType>();
     techTypes.add(new TechnologyType("Transcriptomics"));
     techTypes.add(new TechnologyType("Proteomics"));
@@ -119,13 +113,15 @@ public class MCCView extends VerticalLayout implements IRegistrationView, IRegis
     this.openbis = openbis;
     this.creator = creationController;
 
-    this.cases = new HashSet<String>();
-    this.patients = new ArrayList<String>();
+    this.cases = new HashSet<>();
+    this.patients = new ArrayList<>();
 
     mccProjects = new ComboBox("Source Project");
-    List<String> projects = new ArrayList<String>();
-    for (Project p : openbis.getProjectsOfSpace(mccSpace))
-      projects.add(p.getCode());
+    List<String> projects = new ArrayList<>();
+    //for (Project p : openbis.getProjectsOfSpace(mccSpace))
+    //  projects.add(p.getCode());
+    projects = openbis.getProjectsOfSpace(mccSpace).stream().map(Project::getCode).collect(Collectors.toList());
+
     mccProjects.addStyleName(Styles.boxTheme);
     mccProjects.addItems(projects);
     mccProjects.setImmediate(true);
@@ -195,6 +191,7 @@ public class MCCView extends VerticalLayout implements IRegistrationView, IRegis
     boolean time = !timepoint.isEmpty() && timepoint.getValue().matches("[1-9][0-9]*");
     boolean input = project && treat && pat && time;
     boolean res = false;
+
     if (input) {
       String extID = treatment.getValue().substring(0, 1) + ":0" + patient.getValue() + ":"
           + timepoint.getValue();
@@ -210,6 +207,19 @@ public class MCCView extends VerticalLayout implements IRegistrationView, IRegis
   private void findAndSetDesignExperiment(String space, String project) throws JAXBException {
     designExperiment = null;
     String id = ExperimentCodeFunctions.getInfoExperimentID(space, project);
+    Experiment exps = openbis.getExperiment(id);
+
+    if (exps == null) {
+      designExperiment = null;
+      logger.error("could not find info experiment for project" + project);
+
+    } else if (exps.getType().getCode().equalsIgnoreCase(ExperimentType.Q_PROJECT_DETAILS.name())) {
+      designExperiment = exps;
+      expDesign = xmlParser.parseXMLString(designExperiment.getProperties().get("Q_EXPERIMENTAL_SETUP"));
+      logger.debug("setting exp design: " + expDesign);
+    }
+
+/*
     List<Experiment> exps = openbis.getExperimentById2(id);
     if (exps.isEmpty()) {
       designExperiment = null;
@@ -223,6 +233,7 @@ public class MCCView extends VerticalLayout implements IRegistrationView, IRegis
         logger.debug("setting exp design: " + expDesign);
       }
     }
+*/
   }
 
   private void initMCCListeners() {
@@ -254,8 +265,10 @@ public class MCCView extends VerticalLayout implements IRegistrationView, IRegis
       public void valueChange(ValueChangeEvent event) {
         if (!newProject.isEmpty())
           counter = new SampleCounter(newProject.getValue());
+
         for (Sample s : openbis.getSamplesOfProject("/" + mccSpace + "/" + newProject.getValue()))
           counter.increment(s);
+
         addSamples.setEnabled(allValid());
       }
     });
@@ -352,11 +365,10 @@ public class MCCView extends VerticalLayout implements IRegistrationView, IRegis
       counter = new SampleCounter(newProject.getValue());
     String treatment = "";
     boolean wrongFormat = false;
-    for (Sample s : openbis.getSamplesWithParentsAndChildrenOfProjectBySearchService(
-        "/" + mccSpace + "/" + (String) mccProjects.getValue())) {
+    for (Sample s : openbis.getSamplesOfProject("/" + mccSpace + "/" + (String)mccProjects.getValue())) {
       counter.increment(s);
       String id = s.getProperties().get("Q_EXTERNALDB_ID");
-      if (s.getSampleTypeCode().equals("Q_BIOLOGICAL_ENTITY")) {
+      if (s.getType().getCode().equals("Q_BIOLOGICAL_ENTITY")) {
         entities.add(s);
         patients.add(id);
       } else {

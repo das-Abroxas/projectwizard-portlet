@@ -52,10 +52,10 @@ public class TSVReadyRunnable implements Runnable {
 
   @Override
   public void run() {
-    List<StreamResource> streams = new ArrayList<StreamResource>();
+    List<StreamResource> streams = new ArrayList<>();
     String ext = "tsv";
     streams.add(Functions.getFileStream(getTSVString(tables.get("Q_BIOLOGICAL_ENTITY")),
-        project + "_sample_sources", ext));
+            project + "_sample_sources", ext));
     streams.add(Functions.getFileStream(getTSVString(tables.get("Q_BIOLOGICAL_SAMPLE")),
         project + "_sample_extracts", ext));
     if (tables.containsKey("Q_TEST_SAMPLE"))
@@ -73,8 +73,8 @@ public class TSVReadyRunnable implements Runnable {
     List<String> labels = new ArrayList<>(factors);
     // header
     
-    for(String l : labels) {
-    header.append("\tCondition: " + l);
+    for (String l : labels) {
+      header.append("\tCondition: " + l);
     }
 
     // data

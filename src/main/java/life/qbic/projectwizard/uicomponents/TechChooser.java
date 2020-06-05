@@ -44,15 +44,13 @@ public class TechChooser extends VerticalLayout {
   private CheckBox pool;
   private List<HorizontalLayout> helpers;
 
+
   /**
+   /**
    * Creates a new condition chooser component
-   * 
+   *
    * @param options List of different possible conditions
-   * @param other Name of the "other" condition, which when selected will enable an input field for
-   *        free text
-   * @param special Name of a "special" condition like species for the entity input, which when
-   *        selected will disable the normal species input because there is more than one instance
-   * @param nullSelectionAllowed true, if the conditions may be empty
+   * @param persons
    */
   public TechChooser(List<String> options, Set<String> persons) {
     chooser = new ComboBox("Analyte", options);

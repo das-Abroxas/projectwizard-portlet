@@ -56,8 +56,7 @@ public class DBManager {
   }
 
   private Connection login() {
-    String DB_URL = "jdbc:mariadb://" + config.getHostname() + ":" + config.getPort() + "/"
-        + config.getSql_database();
+    String DB_URL = "jdbc:mariadb://" + config.getHostname() + ":" + config.getPort() + "/" + config.getSql_database();
 
     Connection conn = null;
 

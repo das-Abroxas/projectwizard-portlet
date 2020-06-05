@@ -72,7 +72,7 @@ public class ProjectContextStep implements WizardStep {
   /**
    * Create a new Context Step for the wizard
    * 
-   * @param newProjectCode
+   * @param projSelect
    */
   public ProjectContextStep(ProjectInformationComponent projSelect) {
     main = new VerticalLayout();

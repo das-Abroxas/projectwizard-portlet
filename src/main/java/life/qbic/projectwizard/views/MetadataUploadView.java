@@ -30,6 +30,12 @@ import java.util.Map;
 import java.util.Set;
 import javax.xml.bind.JAXBElement;
 import javax.xml.bind.JAXBException;
+
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.experiment.Experiment;
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.property.DataType;
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.property.PropertyType;
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.Sample;
+import life.qbic.openbis.openbisclient.OpenBisClient;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
@@ -37,7 +43,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import life.qbic.datamodel.identifiers.ExperimentCodeFunctions;
 import life.qbic.datamodel.identifiers.SampleCodeFunctions;
-import life.qbic.openbis.openbisclient.IOpenBisClient;
 import life.qbic.projectwizard.model.Vocabularies;
 import life.qbic.projectwizard.processes.MetadataUpdateReadyRunnable;
 import life.qbic.projectwizard.registration.UpdateProgressBar;
@@ -78,12 +83,7 @@ import com.vaadin.ui.Button.ClickEvent;
 import com.vaadin.ui.Upload.FinishedListener;
 import com.vaadin.ui.VerticalLayout;
 import com.vaadin.ui.Window;
-import ch.systemsx.cisd.openbis.generic.shared.api.v1.dto.Experiment;
-import ch.systemsx.cisd.openbis.generic.shared.api.v1.dto.PropertyType;
-import ch.systemsx.cisd.openbis.generic.shared.api.v1.dto.Sample;
-// import ch.ethz.sis.openbis.generic.asapi.v3.dto.experiment.Experiment;
-// import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.Sample;
-import ch.systemsx.cisd.openbis.generic.shared.basic.dto.DataTypeCode;
+
 import com.vaadin.ui.Upload.FinishedEvent;
 
 
@@ -111,7 +111,7 @@ public class MetadataUploadView extends VerticalLayout {
   private Experiment designExperiment;
   private JAXBElement<Qexperiment> expDesign;
 
-  private IOpenBisClient openbis;
+  private OpenBisClient openbis;
   private Map<String, Object> metadata;
   private List<String> customProperties = new ArrayList<String>(
       Arrays.asList("IGNORE (removes column)", "[Experimental Condition]", "[Other Property]"));
@@ -133,8 +133,7 @@ public class MetadataUploadView extends VerticalLayout {
   private boolean overWriteAllowed = false;
   private final int BATCH_SIZE = 50;
 
-  public MetadataUploadView(IOpenBisClient openbis, Vocabularies vocabularies,
-      boolean overWriteAllowed, String user) {
+  public MetadataUploadView(OpenBisClient openbis, Vocabularies vocabularies, boolean overWriteAllowed, String user) {
     allowedSpaces = new HashSet<String>(vocabularies.getSpaces());
     this.overWriteAllowed = overWriteAllowed;
     sheet = new TabSheet();
@@ -148,20 +147,20 @@ public class MetadataUploadView extends VerticalLayout {
       analytesMap.put(e, e);
     }
 
-    propToVocabulary = new HashMap<String, Map<String, String>>();
+    propToVocabulary = new HashMap<>();
     propToVocabulary.put("Q_NCBI_ORGANISM", taxMap);
     propToVocabulary.put("Q_PRIMARY_TISSUE", tissueMap);
     propToVocabulary.put("Q_SAMPLE_TYPE", analytesMap);
 
-    Map<String, String> reverseTaxMap = new HashMap<String, String>();
+    Map<String, String> reverseTaxMap = new HashMap<>();
     for (Map.Entry<String, String> entry : taxMap.entrySet()) {
       reverseTaxMap.put(entry.getValue(), entry.getKey());
     }
-    Map<String, String> reverseTissueMap = new HashMap<String, String>();
+    Map<String, String> reverseTissueMap = new HashMap<>();
     for (Map.Entry<String, String> entry : tissueMap.entrySet()) {
       reverseTissueMap.put(entry.getValue(), entry.getKey());
     }
-    propToReverseVocabulary = new HashMap<String, Map<String, String>>();
+    propToReverseVocabulary = new HashMap<>();
     propToReverseVocabulary.put("Q_NCBI_ORGANISM", reverseTaxMap);
     propToReverseVocabulary.put("Q_PRIMARY_TISSUE", reverseTissueMap);
     propToReverseVocabulary.put("Q_SAMPLE_TYPE", analytesMap);
@@ -409,28 +408,29 @@ public class MetadataUploadView extends VerticalLayout {
   private void findAndSetDesignExperiment(String space, String project) throws JAXBException {
     designExperiment = null;
     String id = ExperimentCodeFunctions.getInfoExperimentID(space, project);
-    List<Experiment> exps = openbis.getExperimentById2(id);
-    if (exps.isEmpty()) {
+    Experiment exps = openbis.getExperiment(id);
+
+    if (exps == null) {
       designExperiment = null;
-      logger.error("could not find info experiment for project" + project);
+      logger.error("Could not find info experiment for project" + project);
+
     } else {
-      designExperiment = exps.get(0);
-      expDesign = studyXMLParser
-          .parseXMLString(designExperiment.getProperties().get("Q_EXPERIMENTAL_SETUP"));
+      designExperiment = exps;
+      expDesign = studyXMLParser.parseXMLString(designExperiment.getProperties().get("Q_EXPERIMENTAL_SETUP"));
       logger.debug("setting exp design: " + expDesign);
     }
   }
 
   protected void ingestRows(List<Integer> rows) throws IllegalArgumentException, JAXBException {
     Table sampleTable = getActiveTable();
-    metadata = new HashMap<String, Object>();
-    List<String> types = new ArrayList<String>();
-    // List<Property> conditions = new ArrayList<Property>();
-    List<String> codes = new ArrayList<String>();
+    metadata = new HashMap<>();
+    List<String> types = new ArrayList<>();
+    List<String> codes = new ArrayList<>();
+
     for (Object col : sampleTable.getContainerPropertyIds()) {
       String attribute = getSelectedProperty(col);
+
       if (!attribute.equals("Properties -->")) {
-        // String unit = null;
         life.qbic.xml.properties.PropertyType propType = null;
         if (attribute.startsWith("Condition: "))
           propType = life.qbic.xml.properties.PropertyType.Factor;
@@ -478,7 +478,7 @@ public class MetadataUploadView extends VerticalLayout {
     metadata.put("identifiers", codes);
     metadata.put("types", types);
     logger.info("Ingesting metadata");
-    openbis.ingest("DSS1", "update-sample-metadata", metadata);
+    openbis.triggerIngestionService("update-sample-metadata", metadata);
   }
 
   protected boolean parseTSV(File file) throws IOException, JAXBException {
@@ -488,13 +488,7 @@ public class MetadataUploadView extends VerticalLayout {
     }
     removeComponent(sheet);
     addComponent(sheet);
-    sheet.addSelectedTabChangeListener(new SelectedTabChangeListener() {
-
-      @Override
-      public void selectedTabChange(SelectedTabChangeEvent event) {
-        reactToTableChange();
-      }
-    });
+    sheet.addSelectedTabChangeListener((SelectedTabChangeListener) event -> reactToTableChange());
 
     sampleTables.clear();
     CSVParser parser = new CSVParserBuilder().withIgnoreQuotations(true)
@@ -502,7 +496,7 @@ public class MetadataUploadView extends VerticalLayout {
     CSVReader reader = new CSVReaderBuilder(new FileReader(file)).withCSVParser(parser).build();
 
     String error = "";
-    ArrayList<String[]> data = new ArrayList<String[]>();
+    ArrayList<String[]> data = new ArrayList<>();
     String[] nextLine;
     int rowID = 0;
     while ((nextLine = reader.readNext()) != null) {
@@ -547,16 +541,17 @@ public class MetadataUploadView extends VerticalLayout {
       }
       barcodeCol = 0;
     }
-    List<Sample> projectSamples =
-        openbis.getSamplesWithParentsAndChildrenOfProjectBySearchService(projectCode);
+    List<Sample> projectSamples = openbis.getSamplesOfProject(projectCode);
 
-    codesToSamples = new HashMap<String, Sample>();
-    Map<String, List<String>> sampleTypeToAttributes = new HashMap<String, List<String>>();
-    Map<String, DataTypeCode> propertyToType = new HashMap<String, DataTypeCode>();
+    codesToSamples = new HashMap<>();
+    Map<String, List<String>> sampleTypeToAttributes = new HashMap<>();
+    Map<String, DataType> propertyToType = new HashMap<>();
     String space = null;
+
     for (Sample s : projectSamples) {
-      space = s.getSpaceCode();
+      space = s.getSpace().getCode();
       // don't add samples the user should not be able to see
+
       if (allowedSpaces.contains(space))
         codesToSamples.put(s.getCode(), s);
     }
@@ -564,8 +559,8 @@ public class MetadataUploadView extends VerticalLayout {
       findAndSetDesignExperiment(space, projectCode);
     }
 
-    propNameToCode = new HashMap<String, String>();
-    codesInTSV = new ArrayList<String>();
+    propNameToCode = new HashMap<>();
+    codesInTSV = new ArrayList<>();
 
     for (int i = 0; i < data.size(); i++) {
       String bc = data.get(i)[barcodeCol];
@@ -575,16 +570,18 @@ public class MetadataUploadView extends VerticalLayout {
             "Sample with code " + bc + " was not found in the Database.", NotificationType.ERROR);
         return false;
       }
-      String type = codesToSamples.get(bc).getSampleTypeCode();
+      String type = codesToSamples.get(bc).getType().getCode();
       if (!sampleTypeToAttributes.containsKey(type)) {
-        List<PropertyType> props =
-            openbis.listPropertiesForType(openbis.getSampleTypeByString(type));
-        List<String> propertyNames = new ArrayList<String>();
+
+        List<PropertyType> props = openbis.listPropertiesForType(openbis.getSampleTypeByString(type));
+        List<String> propertyNames = new ArrayList<>();
+
         for (PropertyType p : props) {
           String propName = p.getLabel();
           String propCode = p.getCode();
           propNameToCode.put(propName, propCode);
-          DataTypeCode dataType = p.getDataType();
+          DataType dataType = p.getDataType();
+
           switch (dataType) {
             case CONTROLLEDVOCABULARY:// TODO properties without mapping?
               if (propToVocabulary.containsKey(propCode)) {
@@ -658,7 +655,7 @@ public class MetadataUploadView extends VerticalLayout {
                   sampleTable.removeContainerProperty(headline);
                   reactToTableChange();
                 } else {
-                  DataTypeCode dType = propertyToType.get(selectedProperty);
+                  DataType dType = propertyToType.get(selectedProperty);
                   if (dType != null) {
                     switch (dType) {
                       case CONTROLLEDVOCABULARY:
@@ -689,7 +686,7 @@ public class MetadataUploadView extends VerticalLayout {
       }
       sampleTable.addItem(row.toArray(), -1);
       for (int i = 0; i < codesInTSV.size(); i++) {
-        String thisType = codesToSamples.get(codesInTSV.get(i)).getSampleTypeCode();
+        String thisType = codesToSamples.get(codesInTSV.get(i)).getType().getCode();
         if (thisType.equals(type)) {
           row = new ArrayList<Object>();
           row.add(codesInTSV.get(i));
@@ -744,7 +741,7 @@ public class MetadataUploadView extends VerticalLayout {
     return res;
   }
 
-  protected void checkForNumberConsistency(String headline, DataTypeCode dType) {
+  protected void checkForNumberConsistency(String headline, DataType dType) {
     boolean consistent = true;
     boolean needsDelimiterChange = false;
     String moreInfo = "Not a number.";
@@ -754,14 +751,14 @@ public class MetadataUploadView extends VerticalLayout {
       if (id != -1) {
         String val = parseLabelCell(id, headline);
         if (!val.isEmpty()) {
-          if (dType.equals(DataTypeCode.INTEGER)) {
+          if (dType.equals(DataType.INTEGER)) {
             try {
               Integer.parseInt(val);
             } catch (NumberFormatException e) {
               consistent = false;
             }
           }
-          if (dType.equals(DataTypeCode.REAL)) {
+          if (dType.equals(DataType.REAL)) {
             // try normal parse
             try {
               Double.parseDouble(val);

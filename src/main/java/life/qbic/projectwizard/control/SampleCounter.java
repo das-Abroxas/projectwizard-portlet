@@ -21,10 +21,10 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.Sample;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import ch.systemsx.cisd.openbis.generic.shared.api.v1.dto.Sample;
 import life.qbic.datamodel.identifiers.SampleCodeFunctions;
 
 public class SampleCounter {
@@ -55,7 +55,8 @@ public class SampleCounter {
   // TODO later updates (after initialization)
   public void increment(Sample s) {
     String code = s.getCode();
-    String experiment = s.getExperimentIdentifierOrNull();
+    String experiment = s.getExperiment().getIdentifier().toString();
+
     try {
       String exp = experiment.split(project + "E")[1];
       int expNum = Integer.parseInt(exp);
@@ -70,7 +71,7 @@ public class SampleCounter {
     }
     if (SampleCodeFunctions.isQbicBarcode(code)) {
       // previously registered samples...
-      List<String> specialCases = new ArrayList<String>(Arrays.asList("QMSHS001X3", "QMSHS002XB",
+      List<String> specialCases = new ArrayList<>(Arrays.asList("QMSHS001X3", "QMSHS002XB",
           "QMSHS003XJ", "QMSHS004XR", "QMSHS005X1", "QMSHS006X9"));
       if (code.startsWith("QMSHS999W"))
         barcode = "QMSHS006X9";
@@ -78,7 +79,7 @@ public class SampleCounter {
         if (SampleCodeFunctions.compareSampleCodes(code, barcode) > 0)
           barcode = code;
       }
-    } else if (s.getSampleTypeCode().equals(("Q_BIOLOGICAL_ENTITY"))) {
+    } else if (s.getType().getCode().equals(("Q_BIOLOGICAL_ENTITY"))) {
       int num = Integer.parseInt(s.getCode().split("-")[1]);
       if (num >= entityID)
         entityID = num;

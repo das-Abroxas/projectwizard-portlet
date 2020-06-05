@@ -10,6 +10,8 @@ import java.util.Map;
 import javax.xml.bind.JAXBElement;
 import javax.xml.bind.JAXBException;
 
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.space.Space;
+import life.qbic.openbis.openbisclient.OpenBisClient;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -24,7 +26,6 @@ import life.qbic.datamodel.persons.OpenbisSpaceUserRole;
 import life.qbic.datamodel.samples.ISampleBean;
 import life.qbic.datamodel.samples.SampleType;
 import life.qbic.datamodel.samples.TSVSampleBean;
-import life.qbic.openbis.openbisclient.IOpenBisClient;
 import life.qbic.xml.manager.StudyXMLParser;
 import life.qbic.xml.study.Qexperiment;
 
@@ -39,25 +40,15 @@ import life.qbic.xml.study.Qexperiment;
 public class OpenbisCreationController implements IOpenbisCreationController {
   final int RETRY_UNTIL_SECONDS_PASSED = 5;
   final int SPLIT_AT_ENTITY_SIZE = 100;
-  private IOpenBisClient openbis;
+  private OpenBisClient openbis;
   private static final Logger logger = LogManager.getLogger(OpenbisCreationController.class);
   private String errors;
   private String user;
 
 
-  public OpenbisCreationController(IOpenBisClient openbis, String user) {
+  public OpenbisCreationController(OpenBisClient openbis, String user) {
     this.openbis = openbis;
     this.user = user;
-  }
-
-  /**
-   * Interact with an ingestion service script registered for the openBIS instance
-   * 
-   * @param ingestionService Name of the ingestions service script registered at openBIS
-   * @param params HashMap of String parameter names and their arguments for the ingestion service
-   */
-  public void openbisGenericIngest(String ingestionService, HashMap<String, Object> params) {
-    openbis.ingest("DSS1", ingestionService, params);
   }
 
   /**
@@ -70,8 +61,8 @@ public class OpenbisCreationController implements IOpenbisCreationController {
    */
   @Override
   public boolean registerSpace(String name, String description,
-      HashMap<OpenbisSpaceUserRole, ArrayList<String>> userInfo) {
-    Map<String, Object> params = new HashMap<String, Object>();
+                               HashMap<OpenbisSpaceUserRole, ArrayList<String>> userInfo) {
+    Map<String, Object> params = new HashMap<>();
     params.put("code", name);
     params.put("registration_user", user);
     for (OpenbisSpaceUserRole type : OpenbisSpaceUserRole.values()) {
@@ -79,7 +70,8 @@ public class OpenbisCreationController implements IOpenbisCreationController {
         params.put(type.toString().toLowerCase(), userInfo.get(type));
     }
     // call ingestion service for space creation
-    openbis.ingest("DSS1", "register-space", params);
+    openbis.triggerIngestionService("register-space", params);
+
     return true;
   }
 
@@ -109,7 +101,7 @@ public class OpenbisCreationController implements IOpenbisCreationController {
     params.put("code", name);
     params.put("space", space);
     params.put("desc", description);
-    openbis.ingest("DSS1", "register-proj", params);
+    openbis.triggerIngestionService("register-proj", params);
     return true;
   }
 
@@ -140,7 +132,7 @@ public class OpenbisCreationController implements IOpenbisCreationController {
     params.put("space", space);
     params.put("properties", map);
     params.put("user", user);
-    openbis.ingest("DSS1", "register-exp", params);
+    openbis.triggerIngestionService("register-exp", params);
     return true;
   }
 
@@ -182,7 +174,7 @@ public class OpenbisCreationController implements IOpenbisCreationController {
       params.put("space", space);
       params.put("properties", props);
       params.put("user", user);
-      openbis.ingest("DSS1", "register-exp", params);
+      openbis.triggerIngestionService("register-exp", params);
     }
     return true;
   }
@@ -208,11 +200,11 @@ public class OpenbisCreationController implements IOpenbisCreationController {
    * 
    * @param tsvSampleHierarchy
    * @param description
-   * @param secondaryName
+   * @param informativeExperiments
    * @param bar
    * @param info
    * @param ready
-   * @param user
+   * @param entitiesToUpdate
    */
   @Override
   public void registerProjectWithExperimentsAndSamplesBatchWise(
@@ -226,10 +218,8 @@ public class OpenbisCreationController implements IOpenbisCreationController {
         new RegisterableProject(tsvSampleHierarchy, description, informativeExperiments, isPilot);
 
     for (String experiment : entitiesToUpdate.keySet()) {
-      String expID = ExperimentCodeFunctions.getExperimentIdentifier(p.getSpace(),
-          p.getProjectCode(), experiment);
-      long modificationTime = openbis.getExperimentById2(expID).get(0).getRegistrationDetails()
-          .getModificationDate().getTime();
+      String expID = ExperimentCodeFunctions.getExperimentIdentifier(p.getSpace(), p.getProjectCode(), experiment);
+      long modificationTime = openbis.getExperiment(expID).getModificationDate().getTime();
 
       updateExperiment(expID, entitiesToUpdate.get(experiment));
 
@@ -237,8 +227,7 @@ public class OpenbisCreationController implements IOpenbisCreationController {
       double TIMEOUT = 10000;
 
       while (newModificationTime == modificationTime && TIMEOUT > 0) {
-        newModificationTime = openbis.getExperimentById2(expID).get(0).getRegistrationDetails()
-            .getModificationDate().getTime();
+        newModificationTime = openbis.getExperiment(expID).getModificationDate().getTime();
         TIMEOUT -= 300;
         try {
           Thread.sleep(300);
@@ -427,7 +416,7 @@ public class OpenbisCreationController implements IOpenbisCreationController {
       }
     }
     logger.info("Sending batch of new samples to Ingestion Service.");
-    openbis.ingest("DSS1", "register-sample-batch", params);
+    openbis.triggerIngestionService("register-sample-batch", params);
     return true;
   }
 

@@ -24,6 +24,11 @@ import java.sql.SQLException;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import javax.xml.bind.JAXBException;
+
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.experiment.Experiment;
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.project.Project;
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.Sample;
+import life.qbic.openbis.openbisclient.OpenBisClient;
 import life.qbic.portal.utils.ConfigurationManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -47,9 +52,7 @@ import com.vaadin.ui.OptionGroup;
 import com.vaadin.ui.TextField;
 import com.vaadin.ui.Button.ClickEvent;
 import com.vaadin.ui.themes.ValoTheme;
-import ch.systemsx.cisd.openbis.generic.shared.api.v1.dto.Experiment;
-import ch.systemsx.cisd.openbis.generic.shared.api.v1.dto.Project;
-import ch.systemsx.cisd.openbis.generic.shared.api.v1.dto.Sample;
+
 import life.qbic.datamodel.attachments.AttachmentConfig;
 import life.qbic.datamodel.experiments.ExperimentBean;
 import life.qbic.datamodel.experiments.ExperimentType;
@@ -65,7 +68,6 @@ import life.qbic.expdesign.SamplePreparator;
 import life.qbic.expdesign.io.QBiCDesignReader;
 import life.qbic.expdesign.model.ExperimentalDesignPropertyWrapper;
 import life.qbic.expdesign.model.SampleSummaryBean;
-import life.qbic.openbis.openbisclient.IOpenBisClient;
 import life.qbic.projectwizard.io.DBManager;
 import life.qbic.projectwizard.model.MSExperimentModel;
 import life.qbic.projectwizard.model.TestSampleInformation;
@@ -76,7 +78,6 @@ import life.qbic.projectwizard.registration.IOpenbisCreationController;
 import life.qbic.projectwizard.registration.OpenbisV3APIWrapper;
 import life.qbic.projectwizard.steps.*;
 import life.qbic.projectwizard.uicomponents.ProjectInformationComponent;
-import life.qbic.utils.TimeUtils;
 import life.qbic.portal.Styles;
 import life.qbic.portal.Styles.NotificationType;
 import life.qbic.xml.notes.Note;
@@ -91,12 +92,15 @@ import life.qbic.xml.study.TechnologyType;
  */
 public class WizardController implements IRegistrationController {
 
-  private IOpenBisClient openbis;
+  private Logger logger = LogManager.getLogger(WizardController.class);
+
+  private OpenBisClient openbis;
   private IOpenbisCreationController openbisCreator;
   private Wizard w;
   private String user;
   private Map<Steps, WizardStep> steps;
   private WizardDataAggregator dataAggregator;
+
   private boolean bioFactorInstancesSet = false;
   private boolean extractFactorInstancesSet = false;
   private boolean extractPoolsSet = false;
@@ -110,35 +114,28 @@ public class WizardController implements IRegistrationController {
   protected List<String> designExperimentTypes;
   private String newExperimentalDesignXML;
 
-  //
-  private String omero_usr;
-  private String omero_pwd;
+  // Omero
+  private String omero_usr, omero_pwd, omero_host;
   private int omero_port;
-  private String omero_host;
 
-  private Logger logger = LogManager.getLogger(WizardController.class);
 
   private AttachmentConfig attachConfig;
   protected Map<String, Map<String, Object>> entitiesToUpdate;
   private OpenbisV3APIWrapper v3API;
 
   /**
-   * 
-   * @param openbis OpenBisClient API
+   *
+   * @param openbis
    * @param v3
    * @param creationController
    * @param dbm
-   * @param taxMap Map containing the NCBI taxonomy (labels and ids) taken from openBIS
-   * @param tissueMap Map containing the tissue
-   * @param sampleTypes List containing the different sample (technology) types
-   * @param spaces List of space names existing in openBIS
-   * @param dataMoverFolder for attachment upload
-   * @param uploadSize
+   * @param vocabularies
+   * @param attachmentConfig
+   * @param configManager
    */
-
-  public WizardController(IOpenBisClient openbis, OpenbisV3APIWrapper v3,
-      IOpenbisCreationController creationController, DBManager dbm, Vocabularies vocabularies,
-      AttachmentConfig attachmentConfig, ConfigurationManager configManager) {
+  public WizardController(OpenBisClient openbis, OpenbisV3APIWrapper v3,
+                          IOpenbisCreationController creationController, DBManager dbm, Vocabularies vocabularies,
+                          AttachmentConfig attachmentConfig, ConfigurationManager configManager) {
 
     this.openbis = openbis;
     this.v3API = v3;
@@ -241,8 +238,8 @@ public class WizardController implements IRegistrationController {
     if (!openbis.projectExists(spaceCode, code))
       return false;
     for (Experiment e : openbis.getExperimentsOfProjectByCode(code)) {
-      if (e.getExperimentTypeCode().equals("Q_EXPERIMENTAL_DESIGN")) {
-        if (openbis.getSamplesofExperiment(e.getIdentifier()).size() > 0)
+      if (e.getType().getCode().equals("Q_EXPERIMENTAL_DESIGN")) {
+        if (openbis.getSamplesOfExperiment(e.getIdentifier().toString()).size() > 0)
           return true;
       }
     }
@@ -261,8 +258,8 @@ public class WizardController implements IRegistrationController {
     if (!openbis.projectExists(spaceCode, code))
       return false;
     for (Experiment e : openbis.getExperimentsOfProjectByCode(code)) {
-      if (e.getExperimentTypeCode().equals("Q_SAMPLE_EXTRACTION"))
-        if (openbis.getSamplesofExperiment(e.getIdentifier()).size() > 0)
+      if (e.getType().getCode().equals("Q_SAMPLE_EXTRACTION"))
+        if (openbis.getSamplesOfExperiment(e.getIdentifier().toString()).size() > 0)
           return true;
     }
     return false;
@@ -720,12 +717,13 @@ public class WizardController implements IRegistrationController {
           if (exp.isPilot() && !contextOptions.get(4).equals(context)) {
             contextStep.selectPilot();
           }
-          List<ISampleBean> beans = new ArrayList<ISampleBean>();
-          for (Sample s : openbis.getSamplesofExperiment(exp.getID())) {
+          List<ISampleBean> beans = new ArrayList<>();
+          for (Sample s : openbis.getSamplesOfExperiment(exp.getID())) {
             Map<String, String> props = s.getProperties();
+
             beans.add(new TSVSampleBean(s.getCode(), exp.getCode(), contextStep.getProjectCode(),
-                s.getSpaceCode(), SampleType.valueOf(s.getSampleTypeCode()),
-                props.get("Q_SECONDARY_NAME"), Arrays.asList(), new HashMap<>()));
+                s.getSpace().getCode(), SampleType.valueOf(s.getType().getCode()),
+                props.get("Q_SECONDARY_NAME"), new ArrayList<>(), new HashMap<>()));
           }
           contextStep.setSamples(beans);
         }
@@ -1158,12 +1156,9 @@ public class WizardController implements IRegistrationController {
           regStep.testRegEnabled();
           // Write TSV mode
           if (contextStep.fetchTSVModeSet()) {
-            try {
-              dataAggregator.parseAll();
-            } catch (JAXBException e1) {
-              e1.printStackTrace();
-            }
+            dataAggregator.parseAll();
             createTSV();
+
             try {
               prep.processTSV(dataAggregator.getTSV(), new QBiCDesignReader(), false);
             } catch (IOException | JAXBException e) {
@@ -1198,10 +1193,12 @@ public class WizardController implements IRegistrationController {
               e.printStackTrace();
             }
           }
-          Project p = openbis.getProjectByIdentifier("/" + space + "/" + proj);
+
+          Project p = openbis.getProject("/" + space + "/" + proj);
           Map<String, List<Sample>> samplesByExperiment = new HashMap<String, List<Sample>>();
-          for (Sample s : openbis.getSamplesOfProject(p.getIdentifier())) {
-            String expID = s.getExperimentIdentifierOrNull();
+
+          for (Sample s : openbis.getSamplesOfProject(p.getIdentifier().toString())) {
+            String expID = s.getExperiment().getIdentifier().toString();
             String exp = expID.substring(expID.lastIndexOf("/") + 1);
             if (samplesByExperiment.containsKey(exp)) {
               List<Sample> lis = samplesByExperiment.get(exp);
@@ -1545,7 +1542,8 @@ public class WizardController implements IRegistrationController {
     params.put("user", note.getUsername());
     params.put("comment", note.getComment());
     params.put("time", note.getTime());
-    openbis.ingest("DSS1", "add-to-xml-note", params);
+    // openbis.ingest("DSS1", "add-to-xml-note", params);
+    openbis.triggerIngestionService("add-to-xml-note", params);
   }
 
   @Override

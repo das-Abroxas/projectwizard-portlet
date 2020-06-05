@@ -9,6 +9,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.vaadin.teemu.wizards.Wizard;
@@ -30,9 +31,7 @@ import com.vaadin.ui.TabSheet;
 import com.vaadin.ui.UI;
 import com.vaadin.ui.VerticalLayout;
 import life.qbic.datamodel.attachments.AttachmentConfig;
-import life.qbic.openbis.openbisclient.IOpenBisClient;
 import life.qbic.openbis.openbisclient.OpenBisClient;
-import life.qbic.portal.portlet.QBiCPortletUI;
 import life.qbic.portal.samplegraph.GraphPage;
 import life.qbic.portal.utils.ConfigurationManager;
 import life.qbic.portal.utils.ConfigurationManagerFactory;
@@ -54,19 +53,19 @@ import life.qbic.projectwizard.views.MetadataUploadView;
 public class ProjectWizardUI extends QBiCPortletUI {
 
   public static boolean development = false;
-  public static boolean v3RegistrationAPI = false;
+  public static boolean v3RegistrationAPI = true;
   public static String MSLabelingMethods;
   public static String tmpFolder;
 
   // hardcoded stuff (main experiment types used in the wizard)
-  List<String> expTypes = new ArrayList<String>(
+  List<String> expTypes = new ArrayList<>(
       Arrays.asList("Q_EXPERIMENTAL_DESIGN", "Q_SAMPLE_EXTRACTION", "Q_SAMPLE_PREPARATION"));
 
   private Logger logger = LogManager.getLogger(ProjectWizardUI.class);
 
   private ConfigurationManager config;
 
-  private IOpenBisClient openbis;
+  private OpenBisClient openbis;
 
   private final TabSheet tabs = new TabSheet();
   private boolean isAdmin = false;
@@ -78,7 +77,6 @@ public class ProjectWizardUI extends QBiCPortletUI {
     final VerticalLayout layout = new VerticalLayout();
     layout.setMargin(true);
     setContent(layout);
-
     String userID = "";
     config = ConfigurationManagerFactory.getInstance();
     boolean success = true;
@@ -107,12 +105,11 @@ public class ProjectWizardUI extends QBiCPortletUI {
     MSLabelingMethods = config.getVocabularyMSLabeling();
     // establish connection to the OpenBIS API
     try {
-      logger.debug("trying to connect to openbis");
-      this.openbis = new OpenBisClient(config.getDataSourceUser(), config.getDataSourcePassword(),
-          config.getDataSourceUrl());
+      logger.debug("Establishing connection to openBIS server...");
+      this.openbis = new OpenBisClient(config.getDataSourceUser(), config.getDataSourcePassword(), config.getDataSourceUrl());
       this.openbis.login();
       v3 = new OpenbisV3APIWrapper(config.getDataSourceUrl(), config.getDataSourceUser(),
-          config.getDataSourcePassword(), userID);
+                                   config.getDataSourcePassword(), userID);
     } catch (Exception e) {
       success = false;
       logger.error(
@@ -131,8 +128,7 @@ public class ProjectWizardUI extends QBiCPortletUI {
       Map<String, String> enzymeMap = v3.getVocabLabelToCode("Q_DIGESTION_PROTEASES");
       Map<String, String> chromTypes = v3.getVocabLabelToCode("Q_CHROMATOGRAPHY_TYPES");
       Map<String, String> antibodiesWithLabels = v3.getVocabLabelToCode("Q_ANTIBODY");
-      Map<String, String> purificationMethods =
-          v3.getVocabLabelToCode("Q_PROTEIN_PURIFICATION_METHODS");
+      Map<String, String> purificationMethods = v3.getVocabLabelToCode("Q_PROTEIN_PURIFICATION_METHODS");
       // Map<String, String> taxMap = openbis.getVocabCodesAndLabelsForVocab("Q_NCBI_TAXONOMY");
       // Map<String, String> tissueMap =
       // openbis.getVocabCodesAndLabelsForVocab("Q_PRIMARY_TISSUES");

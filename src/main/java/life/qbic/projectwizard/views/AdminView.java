@@ -18,6 +18,8 @@ package life.qbic.projectwizard.views;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+
+import life.qbic.openbis.openbisclient.OpenBisClient;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -46,7 +48,7 @@ public class AdminView extends VerticalLayout {
    */
   private static final long serialVersionUID = -1713715806593305379L;
 
-  IOpenBisClient openbis;
+  OpenBisClient openbis;
   IOpenbisCreationController registrator;
   String user;
 
@@ -68,10 +70,10 @@ public class AdminView extends VerticalLayout {
   // logger
   private Logger logger = LogManager.getLogger(AdminView.class);
   
-  public AdminView(IOpenBisClient openbis, Vocabularies vocabularies,
+  public AdminView(OpenBisClient openbis, Vocabularies vocabularies,
       WizardController mainController, IOpenbisCreationController creationController, String user) {
+
     this.mainController = mainController;
-    
     this.user = user;
     this.registrator = creationController;
     this.openbis = openbis;

@@ -27,8 +27,13 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import javax.xml.bind.JAXBElement;
 import javax.xml.bind.JAXBException;
+
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.experiment.Experiment;
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.Sample;
+import ch.ethz.sis.openbis.generic.asapi.v3.exceptions.NotFetchedException;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
@@ -55,9 +60,7 @@ import life.qbic.projectwizard.model.MSExperimentModel;
 import life.qbic.projectwizard.model.RegisteredAnalyteInformation;
 import life.qbic.projectwizard.model.TestSampleInformation;
 import life.qbic.projectwizard.model.TissueInfo;
-import ch.systemsx.cisd.openbis.generic.shared.api.v1.dto.Experiment;
-import ch.systemsx.cisd.openbis.generic.shared.api.v1.dto.Sample;
-import ch.systemsx.cisd.openbis.plugin.query.shared.api.v1.dto.QueryTableModel;
+
 import life.qbic.projectwizard.steps.ConditionInstanceStep;
 import life.qbic.projectwizard.steps.EntityStep;
 import life.qbic.projectwizard.steps.ExtractionStep;
@@ -87,8 +90,7 @@ public class WizardDataAggregator {
 
   private IOpenBisClient openbis;
   // private XMLParser xmlParser = new XMLParser();
-  private Map<String, String> taxMap;
-  private Map<String, String> tissueMap;
+  private Map<String, String> taxMap, tissueMap;
   private Map<String, Property> factorMap;
   private Map<String, Integer> personMap;
   private int firstFreeExperimentID;
@@ -100,13 +102,10 @@ public class WizardDataAggregator {
   private char classChar = 'X';
 
   // mandatory openBIS fields
-  private String spaceCode;
-  private String projectCode;
+  private String spaceCode, projectCode;
   private List<OpenbisExperiment> experiments;
-  private String species;
-  private String speciesInfo;
-  private String tissue;
-  private String specialTissue;
+  private String species, speciesInfo;
+  private String tissue, specialTissue;
   private List<TestSampleInformation> techTypeInfo = new ArrayList<TestSampleInformation>();
 
   // info needed to create samples
@@ -132,9 +131,10 @@ public class WizardDataAggregator {
 
   private Map<String, Map<String, Object>> mhcExperimentProtocols;
   private MSExperimentModel fractionationProperties;
-  private List<ExperimentType> informativeExpTypes = new ArrayList<ExperimentType>(
-      Arrays.asList(ExperimentType.Q_MHC_LIGAND_EXTRACTION, ExperimentType.Q_MS_MEASUREMENT));
+  private List<ExperimentType> informativeExpTypes = new ArrayList<>(
+          Arrays.asList(ExperimentType.Q_MHC_LIGAND_EXTRACTION, ExperimentType.Q_MS_MEASUREMENT));
   private String expDesignExperimentCode;
+
   // private String designExperimentID;
   final private StudyXMLParser parser = new StudyXMLParser();
   private JAXBElement<Qexperiment> oldExpDesign;
@@ -151,7 +151,8 @@ public class WizardDataAggregator {
    * @param tissueMap mapping of tissue names and labels
    */
   public WizardDataAggregator(Map<Steps, WizardStep> steps, IOpenBisClient openbis,
-      Map<String, String> taxMap, Map<String, String> tissueMap, Map<String, Integer> personMap) {
+                              Map<String, String> taxMap, Map<String, String> tissueMap,
+                              Map<String, Integer> personMap) {
     s1 = (ProjectContextStep) steps.get(Steps.Project_Context);
     s2 = (EntityStep) steps.get(Steps.Entities);
     s3 = (ConditionInstanceStep) steps.get(Steps.Entity_Conditions);
@@ -183,7 +184,7 @@ public class WizardDataAggregator {
 
     samples = new ArrayList<Sample>();
     if (openbis.projectExists(spaceCode, projectCode)) {
-      samples.addAll(openbis.getSamplesWithParentsAndChildrenOfProjectBySearchService(
+      samples.addAll(openbis.getSamplesOfProject(
           "/" + spaceCode + "/" + projectCode));
     }
 
@@ -209,7 +210,7 @@ public class WizardDataAggregator {
           if (SampleCodeFunctions.compareSampleCodes(firstFreeBarcode, code) <= 0) {
             firstFreeBarcode = SampleCodeFunctions.incrementSampleCode(code);
           }
-        } else if (s.getSampleTypeCode().equals(("Q_BIOLOGICAL_ENTITY"))) {
+        } else if (s.getType().getCode().equals(("Q_BIOLOGICAL_ENTITY"))) {
           int num = Integer.parseInt(s.getCode().split("-")[1]);
           if (num >= firstFreeEntityID)
             firstFreeEntityID = num + 1;
@@ -238,7 +239,7 @@ public class WizardDataAggregator {
 
     // entities are not created new, but parsed from registered ones
     if (inheritEntities) {
-      openbisEntities = openbis.getSamplesofExperiment(s1.getExperiment().getID());
+      openbisEntities = openbis.getSamplesOfExperiment(s1.getExperiment().getID());
       entities = parseEntities(openbisEntities, copy);
       // create new entities and an associated experiment from collected inputs
     } else {
@@ -277,8 +278,8 @@ public class WizardDataAggregator {
       if (copyMode) {
         // child experiment of entities
         String expID = existingSamples.get(openbisEntities.get(0).getCode()).getChildren().get(0)
-            .getExperimentIdentifierOrNull();
-        List<Sample> samples = openbis.getSamplesofExperiment(expID);
+            .getExperiment().getIdentifier().toString();
+        List<Sample> samples = openbis.getSamplesOfExperiment(expID);
         Map<Sample, List<String>> parentMap = getParentMap(samples);
         List<AOpenbisSample> oldExtracts = parseExtracts(samples, parentMap);
         Set<String> entityCodes = new HashSet<String>();
@@ -311,7 +312,7 @@ public class WizardDataAggregator {
         this.factorMap = new HashMap<String, Property>();
         experiments = new ArrayList<OpenbisExperiment>();
 
-        List<Sample> samples = openbis.getSamplesofExperiment(s1.getExperiment().getID());
+        List<Sample> samples = openbis.getSamplesOfExperiment(s1.getExperiment().getID());
         extracts = parseExtracts(samples, getParentMap(samples));
       }
       // create new entities and an associated experiment from collected inputs
@@ -342,34 +343,21 @@ public class WizardDataAggregator {
 
   // TODO move this to openbisclient and remove from here and barcodecontroller
   protected Map<Sample, List<String>> getParentMap(List<Sample> samples) {
-    List<String> codes = new ArrayList<String>();
-    for (Sample s : samples) {
-      codes.add(s.getCode());
-    }
-    Map<String, Object> params = new HashMap<String, Object>();
-    params.put("codes", codes);
-    QueryTableModel resTable = openbis.getAggregationService("get-parentmap", params);
-    Map<String, List<String>> parentMap = new HashMap<String, List<String>>();
+    Map<Sample, List<String>> parentMap = new HashMap<>();
 
-    for (Serializable[] ss : resTable.getRows()) {
-      String code = (String) ss[0];
-      String parent = (String) ss[1];
-      if (parentMap.containsKey(code)) {
-        List<String> parents = parentMap.get(code);
-        parents.add(parent);
-        parentMap.put(code, parents);
-      } else {
-        parentMap.put(code, new ArrayList<String>(Arrays.asList(parent)));
+    for (Sample s : samples) {
+      List<String> parentCodes = new ArrayList<>();
+
+      try {
+        parentCodes = s.getParents().stream().map(Sample::getCode).collect(Collectors.toList());
+        parentMap.put(s, parentCodes);
+
+      } catch (NotFetchedException nfe) {
+        parentMap.put(s, new ArrayList<>());
       }
     }
-    Map<Sample, List<String>> res = new HashMap<Sample, List<String>>();
-    for (Sample s : samples) {
-      List<String> prnts = parentMap.get(s.getCode());
-      if (prnts == null)
-        prnts = new ArrayList<String>();
-      res.put(s, prnts);
-    }
-    return res;
+
+    return parentMap;
   }
 
 
@@ -821,15 +809,16 @@ public class WizardDataAggregator {
    * @return List of AOpenbisSamples containing entities
    * @throws JAXBException
    */
-  private List<AOpenbisSample> parseEntities(List<Sample> entities, boolean copy)
-      throws JAXBException {
-    oldCodesToNewCodes = new HashMap<String, String>();
-    List<AOpenbisSample> res = new ArrayList<AOpenbisSample>();
-    String[] eSplit = entities.get(0).getExperimentIdentifierOrNull().split("/");
+  private List<AOpenbisSample> parseEntities(List<Sample> entities, boolean copy) {
+    oldCodesToNewCodes = new HashMap<>();
+    List<AOpenbisSample> res = new ArrayList<>();
+    String[] eSplit = entities.get(0).getExperiment().getIdentifier().toString().split("/");
     String exp = eSplit[eSplit.length - 1];
     int entityNum = firstFreeEntityID;
+
     for (Sample s : entities) {
       String code = s.getCode();
+
       if (copy) {
         code = projectCode + "ENTITY-" + entityNum;
         oldCodesToNewCodes.put(s.getCode(), code);
@@ -850,12 +839,6 @@ public class WizardDataAggregator {
         }
       }
 
-      // List<Property> factors =
-      // xmlParser.getExpFactors(xmlParser.parseXMLString(p.get("Q_PROPERTIES")));
-      // for (Property f : factors) {
-      // String name = f.getValue() + f.getUnit();
-      // factorMap.put(name, f);
-      // }
       res.add(new OpenbisBiologicalEntity(code, spaceCode, exp, p.get("Q_SECONDARY_NAME"),
           p.get("Q_ADDITIONAL_INFO"), factors, p.get("Q_NCBI_ORGANISM"),
           p.get("Q_ORGANISM_DETAILED"), p.get("Q_EXTERNALDB_ID")));
@@ -865,18 +848,16 @@ public class WizardDataAggregator {
 
   /**
    * Parse existing extracts from the system. They are assumed to be of the same experiment!
-   * 
-   * @param parentMap
-   * 
-   * @param entities List of biological extracts in the form of openBIS Samples
+   *
+   * @param extracts List of biological extracts in the form of openBIS Samples
+   * @param childParentsMap
    * @return List of AOpenbisSamples containing extracts
-   * @throws JAXBException
    */
-  private List<AOpenbisSample> parseExtracts(List<Sample> extracts,
-      Map<Sample, List<String>> childParentsMap) throws JAXBException {
-    List<AOpenbisSample> res = new ArrayList<AOpenbisSample>();
-    String[] eSplit = extracts.get(0).getExperimentIdentifierOrNull().split("/");
+  private List<AOpenbisSample> parseExtracts(List<Sample> extracts, Map<Sample, List<String>> childParentsMap)  {
+    List<AOpenbisSample> res = new ArrayList<>();
+    String[] eSplit = extracts.get(0).getExperiment().getIdentifier().toString().split("/");
     String exp = eSplit[eSplit.length - 1];
+
     for (Sample s : extracts) {
       String code = s.getCode();
       Map<String, String> p = s.getProperties();
@@ -894,12 +875,7 @@ public class WizardDataAggregator {
           factorMap.put(name, f);
         }
       }
-      // List<Property> factors =
-      // xmlParser.getExpFactors(xmlParser.parseXMLString(p.get("Q_PROPERTIES")));
-      // for (Property f : factors) {
-      // String name = f.getValue() + f.getUnit();
-      // factorMap.put(name, f);
-      // }
+
       res.add(new OpenbisBiologicalSample(code, spaceCode, exp, p.get("Q_SECONDARY_NAME"),
           p.get("Q_ADDITIONAL_INFO"), factors, p.get("Q_PRIMARY_TISSUE"),
           p.get("Q_TISSUE_DETAILED"), parseParents(s, childParentsMap), p.get("Q_EXTERNALDB_ID")));
@@ -911,16 +887,16 @@ public class WizardDataAggregator {
    * Parse existing test samples from the system
    * 
    * @param tests List of test samples in the form of openBIS Samples
-   * @param parentMap
+   * @param childToParentsMap
    * @return List of AOpenbisSamples containing test samples
    * @throws JAXBException
    */
-  private List<AOpenbisSample> parseTestSamples(List<Sample> tests,
-      Map<Sample, List<String>> childToParentsMap) throws JAXBException {
-    List<AOpenbisSample> res = new ArrayList<AOpenbisSample>();
+  private List<AOpenbisSample> parseTestSamples(List<Sample> tests, Map<Sample, List<String>> childToParentsMap) {
+    List<AOpenbisSample> res = new ArrayList<>();
+
     for (Sample s : tests) {
       String code = s.getCode();
-      String[] eSplit = s.getExperimentIdentifierOrNull().split("/");
+      String[] eSplit = s.getExperiment().getIdentifier().toString().split("/");
       Map<String, String> p = s.getProperties();
       List<Property> factors = new ArrayList<>();
 
@@ -935,12 +911,7 @@ public class WizardDataAggregator {
           factorMap.put(name, f);
         }
       }
-      // List<Property> factors =
-      // xmlParser.getExpFactors(xmlParser.parseXMLString(p.get("Q_PROPERTIES")));
-      // for (Property f : factors) {
-      // String name = f.getValue() + f.getUnit();
-      // factorMap.put(name, f);
-      // }
+
       res.add(new OpenbisTestSample(code, spaceCode, eSplit[eSplit.length - 1],
           p.get("Q_SECONDARY_NAME"), p.get("Q_ADDITIONAL_INFO"), factors, p.get("Q_SAMPLE_TYPE"),
           parseParents(s, childToParentsMap), p.get("Q_EXTERNALDB_ID")));
@@ -952,107 +923,20 @@ public class WizardDataAggregator {
    * Get the parents of a sample give its code and return them space delimited so they can be added
    * to a tsv
    * 
-   * @param parentMap
-   * 
-   * @param code
+   * @param sample
+   * @param childParentsMap
    * @return
    */
   private String parseParents(Sample sample, Map<Sample, List<String>> childParentsMap) {
     if (childParentsMap != null && childParentsMap.containsKey(sample))
       return StringUtils.join(childParentsMap.get(sample), " ");
     else {
-      List<String> codes = new ArrayList<String>();
+      List<String> codes = new ArrayList<>();
       for (Sample s : sample.getParents())
         codes.add(s.getCode());
       return StringUtils.join(codes, " ");
     }
   }
-
-  // /**
-  // * Copy a list of samples, used by the copy context function
-  // *
-  // * @param samples
-  // * @param copies
-  // * @return
-  // */
-  // private List<AOpenbisSample> copySamples(List<AOpenbisSample> samples,
-  // Map<String, String> copies) {
-  // String newExp = buildExperimentName();
-  // String type = samples.get(0).getValueMap().get("SAMPLE TYPE");
-  // ExperimentType eType = ExperimentType.Q_EXPERIMENTAL_DESIGN;
-  // if (type.equals("Q_BIOLOGICAL_ENTITY"))
-  // eType = ExperimentType.Q_EXPERIMENTAL_DESIGN;
-  // else if (type.equals("Q_BIOLOGICAL_SAMPLE"))
-  // eType = ExperimentType.Q_SAMPLE_EXTRACTION;
-  // else if (type.equals("Q_TEST_SAMPLE"))
-  // eType = ExperimentType.Q_SAMPLE_PREPARATION;
-  // else
-  // logger.error("Unexpected type: " + type);
-  // experiments.add(new OpenbisExperiment(newExp, eType, -1, null));// TODO secondary name?
-  //
-  // for (AOpenbisSample s : samples) {
-  // s.setExperiment(newExp);
-  // String code = s.getCode();
-  // String newCode = code;
-  // if (s instanceof OpenbisBiologicalEntity) {
-  // newCode = projectCode + "ENTITY-" + firstFreeEntityID;
-  // firstFreeEntityID++;
-  // } else {
-  // if (nextBarcode == null) {
-  // // classChar = 'A';
-  // // nextBarcode =
-  // // projectCode + Functions.createCountString(firstFreeBarcodeID, 3) + classChar;
-  // // nextBarcode = nextBarcode + Functions.checksum(nextBarcode);
-  // nextBarcode = firstFreeBarcode;
-  // } else {
-  // nextBarcode = SampleCodeFunctions.incrementSampleCode(nextBarcode);
-  // }
-  // newCode = nextBarcode;
-  // }
-  // copies.put(code, newCode);
-  // s.setCode(newCode);
-  // String p = s.getParent();
-  // // change parent if parent was copied
-  // if (p != null && p.length() > 0)
-  // if (copies.containsKey(p))
-  // s.setParent(copies.get(p));
-  // }
-  // return samples;
-  // }
-
-  /**
-   * Gets all samples that are one level higher in the sample hierarchy of an attached experiment
-   * than a given list of samples
-   * 
-   * @param originals
-   * @return
-   */
-  private List<Sample> getUpperSamples(List<Sample> originals) {
-    for (Sample s : originals) {
-      List<Sample> parents = openbis.getParentsBySearchService(s.getCode());
-      if (parents.size() > 0) {
-        return openbis.getSamplesofExperiment(parents.get(0).getExperimentIdentifierOrNull());
-      }
-    }
-    return null;
-  }
-
-  // /**
-  // * Gets all samples that are one level lower in the sample hierarchy of an attached experiment
-  // * than a given list of samples
-  // *
-  // * @param originals
-  // * @return
-  // */
-  // private List<Sample> getLowerSamples(List<Sample> originals) {
-  // for (Sample s : originals) {
-  // List<Sample> children = openbis.getChildrenSamples(s);
-  // if (children.size() > 0) {
-  // return openbis.getSamplesofExperiment(children.get(0).getExperimentIdentifierOrNull());
-  // }
-  // }
-  // return null;
-  // }
 
   /**
    * Creates a tab separated values file of the context created by the wizard, given that samples
@@ -1211,18 +1095,18 @@ public class WizardDataAggregator {
     return entities;
   }
 
-  public void parseAll() throws JAXBException {
+  public void parseAll() {
     prepareBasics();
-    factorMap = new HashMap<String, Property>();
+    factorMap = new HashMap<>();
 
-    List<Sample> openbisEntities = new ArrayList<Sample>();
-    List<Sample> openbisExtracts = new ArrayList<Sample>();
-    List<Sample> openbisTests = new ArrayList<Sample>();
+    List<Sample> openbisEntities = new ArrayList<>();
+    List<Sample> openbisExtracts = new ArrayList<>();
+    List<Sample> openbisTests = new ArrayList<>();
+    List<Sample> allSamples = openbis.getSamplesOfProject(projectCode);
 
-    List<Sample> allSamples =
-        openbis.getSamplesWithParentsAndChildrenOfProjectBySearchService(projectCode);
     for (Sample sa : allSamples) {
-      String type = sa.getSampleTypeCode();
+      String type = sa.getType().getCode();
+
       switch (type) {
         case "Q_BIOLOGICAL_ENTITY":
           openbisEntities.add(sa);
@@ -1380,25 +1264,29 @@ public class WizardDataAggregator {
 
   public RegisteredAnalyteInformation getBaseAnalyteInformation() {
     // TODO replicates?
-    Map<String, List<Sample>> infos = new HashMap<String, List<Sample>>();
+    Map<String, List<Sample>> infos = new HashMap<>();
+
     for (Sample s : existingSamples.values()) {
-      String type = s.getSampleTypeCode();
+      String type = s.getType().getCode();
+
       if (type.equals("Q_TEST_SAMPLE")) {
         Map<String, String> props = s.getProperties();
         String analyte = props.get("Q_SAMPLE_TYPE");
+
         if (infos.containsKey(analyte)) {
           infos.get(analyte).add(s);
         } else {
-          infos.put(analyte, new ArrayList<Sample>(Arrays.asList(s)));
+          infos.put(analyte, new ArrayList<>(Arrays.asList(s)));
         }
       }
     }
+
     boolean measurePeptides = false;
     boolean shortGel = false;
     String purificationMethod = "";
     if (infos.containsKey("PROTEINS")) {
       Sample first = infos.get("PROTEINS").get(0);
-      String expID = first.getExperimentIdentifierOrNull();
+      String expID = first.getExperiment().getIdentifier().toString();
       for (Experiment e : openbis.getExperimentsOfProjectByCode(first.getCode().substring(0, 5))) {
         if (e.getIdentifier().equals(expID)) {
           Map<String, String> props = e.getProperties();
@@ -1412,7 +1300,7 @@ public class WizardDataAggregator {
       if (infos.containsKey("PEPTIDES")) {
         for (Sample s : infos.get("PEPTIDES")) {
           for (Sample p : s.getParents()) {
-            if (p.getSampleTypeCode().equals("Q_TEST_SAMPLE")
+            if (p.getType().getCode().equals("Q_TEST_SAMPLE")
                 && p.getProperties().get("Q_SAMPLE_TYPE").equals("PROTEINS")) {
               measurePeptides = true;
               break;

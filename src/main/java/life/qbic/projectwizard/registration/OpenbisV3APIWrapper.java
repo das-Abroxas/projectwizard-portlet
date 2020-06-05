@@ -1,9 +1,7 @@
 package life.qbic.projectwizard.registration;
 
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import ch.ethz.sis.openbis.generic.asapi.v3.IApplicationServerApi;
@@ -93,8 +91,24 @@ public class OpenbisV3APIWrapper {
     API.updateDataSets(userToken, dSets);
   }
 
+  private boolean loggedIn() {
+    try {
+      return API.isSessionActive(adminToken);
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
+  public boolean loggedIn(String user) {
+    try {
+      return API.isSessionActive(userToken) && API.getSessionInformation(userToken).getUserName().equals(user);
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
   private void checklogin() {
-    if (userToken == null && !userCantLogin) {
+    if (userToken == null && !userCantLogin || !loggedIn(user)) {
       logger.info("Logging in to the openBIS V3 API as user " + user + ".");
       userToken = API.loginAs(adminUser, pw, user);
       if (userToken != null) {
@@ -104,7 +118,8 @@ public class OpenbisV3APIWrapper {
         userCantLogin = true;
       }
     }
-    if (adminToken == null) {
+
+    if (adminToken == null || !loggedIn()) {
       logger.info("Logging in to the openBIS V3 API as config user: "+adminUser);
       adminToken = adminAPI.login(adminUser, pw);
       if (adminToken != null) {
@@ -124,17 +139,19 @@ public class OpenbisV3APIWrapper {
   public boolean handleOperations(IOperation operation) {
     checklogin();
     SynchronousOperationExecutionOptions options = new SynchronousOperationExecutionOptions();
-    List<IOperation> ops = Arrays.asList(operation);
+    List<IOperation> ops = Collections.singletonList(operation);
+
     try {
       API.executeOperations(userToken, ops, options);
       return true;
+
     } catch (Exception e) {
       e.printStackTrace();
       if (e.getCause() != null) {
         errors = e.getCause().getMessage();
         if (errors.startsWith("Access denied to object with ProjectIdentifier")) {
           logger.warn("User " + user
-              + " could not create project, most likely because they are no power user in openBIS.");
+              + " could not create project, most likely because they are no POWER_USER in openBIS.");
           logger.info("Trying to create project with config user instead.");
           try {
             adminAPI.executeOperations(adminToken, ops, options);

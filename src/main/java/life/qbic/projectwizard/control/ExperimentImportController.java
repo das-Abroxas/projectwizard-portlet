@@ -30,6 +30,10 @@ import java.util.stream.Collectors;
 
 import javax.xml.bind.JAXBException;
 
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.experiment.Experiment;
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.project.Project;
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.Sample;
+import life.qbic.openbis.openbisclient.OpenBisClient;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -52,9 +56,6 @@ import com.vaadin.ui.Upload.FinishedEvent;
 import com.vaadin.ui.Upload.FinishedListener;
 import com.wcs.wcslib.vaadin.widget.multifileupload.ui.AllUploadFinishedHandler;
 
-import ch.systemsx.cisd.openbis.generic.shared.api.v1.dto.Experiment;
-import ch.systemsx.cisd.openbis.generic.shared.api.v1.dto.Project;
-import ch.systemsx.cisd.openbis.generic.shared.api.v1.dto.Sample;
 import life.qbic.datamodel.experiments.ExperimentType;
 import life.qbic.datamodel.experiments.OpenbisExperiment;
 import life.qbic.datamodel.identifiers.ExperimentCodeFunctions;
@@ -97,25 +98,24 @@ import life.qbic.projectwizard.uicomponents.MultiUploadComponent;
 
 public class ExperimentImportController implements IRegistrationController {
 
+  private final Logger logger = LogManager.getLogger(ExperimentImportController.class);
+
   private ExperimentImportView view;
   private final Uploader uploader = new Uploader();
   private IOpenbisCreationController openbisCreator;
   private SamplePreparator prep;
   //
   private ProjectInfo projectInfo;
-  private Map<String, Map<String, Object>> msProperties;
-  private Map<String, Map<String, Object>> mhcProperties;
+  private Map<String, Map<String, Object>> msProperties, mhcProperties;
   private Map<String, MHCTyping> dnaSampleCodeToMHCType;
   private Map<String, Sample> extIDToSample;
   private List<OpenbisExperiment> complexExperiments;
 
-  private Map<String, String> reverseTaxMap;
-  private Map<String, String> taxMap;
-  private Map<String, String> reverseTissueMap;
-  private Map<String, String> tissueMap;
+  private Map<String, String> taxMap, reverseTaxMap;
+  private Map<String, String> tissueMap, reverseTissueMap;
   private List<String> analytesVocabulary;
   private MissingInfoComponent questionaire;
-  private IOpenBisClient openbis;
+  private OpenBisClient openbis;
   private DBManager dbm;
   private Vocabularies vocabs;
   private Experiment currentDesignExperiment;
@@ -125,7 +125,6 @@ public class ExperimentImportController implements IRegistrationController {
   private String nextBarcode;
   Map<String, String> extCodeToBarcode;
 
-  private final Logger logger = LogManager.getLogger(ExperimentImportController.class);
   protected String experimentalDesignXML;
   private Map<String, Map<String, Object>> entitiesToUpdate;
   private ArrayList<Sample> currentProjectSamples;
@@ -134,7 +133,7 @@ public class ExperimentImportController implements IRegistrationController {
   protected ISAStudyInfos isaStudyInfos;
 
   public ExperimentImportController(IOpenbisCreationController creationController, Vocabularies vocabularies,
-      IOpenBisClient openbis, DBManager dbm) {
+      OpenBisClient openbis, DBManager dbm) {
     view = new ExperimentImportView();
     this.dbm = dbm;
     this.questionaire = view.getMissingInfoComponent();
@@ -143,11 +142,11 @@ public class ExperimentImportController implements IRegistrationController {
     this.taxMap = vocabularies.getTaxMap();
     this.tissueMap = vocabularies.getTissueMap();
     this.analytesVocabulary = vocabularies.getAnalyteTypes();
-    this.reverseTaxMap = new HashMap<String, String>();
+    this.reverseTaxMap = new HashMap<>();
     for (Map.Entry<String, String> entry : taxMap.entrySet()) {
       this.reverseTaxMap.put(entry.getValue(), entry.getKey());
     }
-    this.reverseTissueMap = new HashMap<String, String>();
+    this.reverseTissueMap = new HashMap<>();
     for (Map.Entry<String, String> entry : tissueMap.entrySet()) {
       this.reverseTissueMap.put(entry.getValue(), entry.getKey());
     }
@@ -516,12 +515,17 @@ public class ExperimentImportController implements IRegistrationController {
 
   private void findFirstExistingDesignExperimentCodeOrNull(String space, String project) {
     String expID = ExperimentCodeFunctions.getInfoExperimentID(space, project);
+
+    currentDesignExperiment = openbis.getExperiment(expID);
+
+    /*
     List<Experiment> experiments = openbis.getExperimentById2(expID);
     // reset
     currentDesignExperiment = null;
     for (Experiment e : experiments) {
       currentDesignExperiment = e;
     }
+    */
   }
 
 
@@ -936,7 +940,7 @@ public class ExperimentImportController implements IRegistrationController {
         questionaire.resetProjects();
         String space = questionaire.getSpaceCode();
         if (space != null) {
-          List<String> projects = new ArrayList<String>();
+          List<String> projects = new ArrayList<>();
           for (Project p : openbis.getProjectsOfSpace(space)) {
             String code = p.getCode();
             // String name = dbm.getProjectName("/" + space + "/" + code);
@@ -988,8 +992,7 @@ public class ExperimentImportController implements IRegistrationController {
     firstFreeBarcode = "";// TODO cleanup where not needed
     currentProjectSamples = new ArrayList<Sample>();
     if (openbis.projectExists(space, project)) {
-      currentProjectSamples.addAll(openbis
-          .getSamplesWithParentsAndChildrenOfProjectBySearchService("/" + space + "/" + project));
+      currentProjectSamples.addAll(openbis.getSamplesOfProject("/" + space + "/" + project));
     }
     List<Experiment> experiments = openbis.getExperimentsOfProjectByCode(project);
     for (Experiment e : experiments) {
@@ -1026,7 +1029,7 @@ public class ExperimentImportController implements IRegistrationController {
           if (firstBarcode.equals(firstFreeBarcode))
             throw new TooManySamplesException();
         }
-      } else if (s.getSampleTypeCode().equals(("Q_BIOLOGICAL_ENTITY"))) {
+      } else if (s.getType().getCode().equals(("Q_BIOLOGICAL_ENTITY"))) {
         int num = Integer.parseInt(s.getCode().split("-")[1]);
         if (num >= firstFreeEntityID)
           firstFreeEntityID = num + 1;

@@ -24,6 +24,9 @@ import java.util.Map;
 import java.util.Set;
 import javax.xml.bind.JAXBElement;
 import javax.xml.bind.JAXBException;
+
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.experiment.Experiment;
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.Sample;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -42,8 +45,7 @@ import com.vaadin.ui.Panel;
 import com.vaadin.ui.ProgressBar;
 import com.vaadin.ui.UI;
 import com.vaadin.ui.VerticalLayout;
-import ch.systemsx.cisd.openbis.generic.shared.api.v1.dto.Experiment;
-import ch.systemsx.cisd.openbis.generic.shared.api.v1.dto.Sample;
+
 import com.vaadin.ui.Button.ClickEvent;
 import com.vaadin.ui.Button.ClickListener;
 import life.qbic.datamodel.attachments.AttachmentConfig;
@@ -73,9 +75,7 @@ public class FinishStep implements WizardStep {
   private VerticalLayout downloads;
   private ProgressBar bar;
   private Label info;
-  private Button dlEntities;
-  private Button dlExtracts;
-  private Button dlPreps;
+  private Button dlEntities, dlExtracts, dlPreps;
   private CheckBox attach;
   private UploadsPanel uploads;
   private Wizard w;
@@ -157,7 +157,7 @@ public class FinishStep implements WizardStep {
   }
 
   public void setExperimentInfos(String space, String proj, String designExpID, String desc,
-      Map<String, List<Sample>> samplesByExperiment, IOpenBisClient openbis) {
+                                 Map<String, List<Sample>> samplesByExperiment, OpenBisClient openbis) {
     boolean empty = samplesByExperiment.isEmpty();
     for (Object listener : browserLink.getListeners(ClickEvent.class))
       browserLink.removeClickListener((ClickListener) listener);
@@ -183,9 +183,9 @@ public class FinishStep implements WizardStep {
     for (String exp : samplesByExperiment.keySet()) {
       List<Sample> samps = samplesByExperiment.get(exp);
       for (Sample s : samps)
-        ids.add(s.getIdentifier());
+        ids.add(s.getIdentifier().toString());
       int amount = samps.size();
-      String sampleType = samps.get(0).getSampleTypeCode();
+      String sampleType = samps.get(0).getType().getCode();
       switch (sampleType) {
         case "Q_BIOLOGICAL_ENTITY":
           entitieNum += amount;
@@ -223,7 +223,7 @@ public class FinishStep implements WizardStep {
   }
 
   private void prepareSpreadsheets(List<String> sampleTypes, int numSamples, String space,
-      final String project, String designExpID, IOpenBisClient openbis) {
+      final String project, String designExpID, OpenBisClient openbis) {
 
     FinishStep layout = this;
     bar.setVisible(true);
@@ -246,14 +246,16 @@ public class FinishStep implements WizardStep {
           }
         }
         logger.debug("designexpID " + designExpID);
-        List<Experiment> exps = openbis.getExperimentById2(designExpID);
+        Experiment exps = openbis.getExperiment(designExpID);
         StudyXMLParser parser = new StudyXMLParser();
         Set<String> factors = new HashSet<>();
         Map<Pair<String, String>, Property> factorsForLabelsAndSamples = new HashMap<>();
         String xml = "";
-        if (!exps.isEmpty()) {
-          xml = exps.get(0).getProperties().get("Q_EXPERIMENTAL_SETUP");
+
+        if (exps != null) {
+          xml = exps.getProperties().get("Q_EXPERIMENTAL_SETUP");
         }
+
         try {
           JAXBElement<Qexperiment> expDesign = parser.parseXMLString(xml);
           factors.addAll(parser.getFactorLabels(expDesign));
@@ -264,12 +266,14 @@ public class FinishStep implements WizardStep {
         }
         // }
 
-        Map<String, List<String>> tables = new HashMap<String, List<String>>();
+        Map<String, List<String>> tables = new HashMap<>();
         for (String type : sampleTypes) {
           tables.put(type, openbis.getProjectTSV(project, type));
           current++;
           updateProgressBar(current, todo, bar, info);
         }
+
+        tables.forEach( (type, list) -> logger.info(String.format("%s: %s", type, list)) );
 
         UI.getCurrent().setPollInterval(-1);
         UI.getCurrent().access(
